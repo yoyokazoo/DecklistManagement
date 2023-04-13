@@ -15,15 +15,18 @@ namespace DecklistManagement
     {
         public static async void DownloadPioneerDecklists()
         {
+            var directoryPath = @"C:\Users\PeterBeckfield\Desktop\Decklists";
+            ProcessDecklists(directoryPath);
+
             /*
             var url = "https://www.mtgtop8.com/archetype?a=920&meta=193&f=PI";
             await DownloadDecksAsync(url);
             */
 
-            
+            /*
             var url = "https://www.mtgtop8.com/format?f=PI";
             await ScrapeAndDownloadArchetypesAsync(url);
-            
+            */
 
             /*
             var url = "https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo";
@@ -158,6 +161,89 @@ namespace DecklistManagement
 
                 Console.WriteLine($"Deck {deckId} downloaded to {savePath}.");
                 fileStream.Close();
+            }
+        }
+
+        /*
+         * Write a c# method that iterates through all of the text files in the following directory:
+
+            C:\Users\PeterBeckfield\Desktop\Decklists
+
+            and for each text file, first remove any line that says "Sideboard" or is an empty line.  Then for each line that is formatted like so:
+
+            # card names
+
+            store the card names in a global dictionary.
+
+            Once all of the files have been iterated through and all of the card names have been added to the dictionary, save a new file called CombinedDecklist.txt that contains one line per card name
+        */
+
+        public static void ProcessDecklists(string directoryPath)
+        {
+            Dictionary<string, int> cardCount = new Dictionary<string, int>();
+
+            var decklistFiles = Directory.GetFiles(directoryPath, "*.txt");
+
+            foreach (var decklistFile in decklistFiles)
+            {
+                var decklist = File.ReadAllLines(decklistFile);
+
+                for (int i = 0; i < decklist.Length; i++)
+                {
+                    if (decklist[i] == "Sideboard" || string.IsNullOrWhiteSpace(decklist[i]))
+                    {
+                        decklist = decklist.Where((source, index) => index != i).ToArray();
+                        i--;
+                    }
+                    else
+                    {
+                        (int, string) cardInfo = ExtractCardInfo(decklist[i]);
+                        int cardAmount = cardInfo.Item1;
+                        string cardName = cardInfo.Item2;
+
+                        // Depends on what we think is more important, raw card count or instances
+                        // For now I think instances
+                        if (cardCount.ContainsKey(cardName))
+                        {
+                            cardCount[cardName]++;
+                            //cardCount[cardName]+= cardAmount;
+                        }
+                        else
+                        {
+                            cardCount[cardName] = 1;
+                            //cardCount[cardName] = cardAmount;
+                        }
+                    }
+                }
+            }
+
+            int minimumInstanceThreshold = 8;
+            var trimmedCardCount = cardCount.Where(kv => kv.Value >= minimumInstanceThreshold).OrderBy(kv => kv.Value);
+            var combinedDecklist = string.Join(Environment.NewLine, trimmedCardCount.Select(kv => $"{kv.Value}x " + kv.Key.Trim()));
+
+            var savePath = Path.Combine(directoryPath, "CombinedDecklist.txt");
+            File.WriteAllText(savePath, combinedDecklist);
+            Console.WriteLine($"Combined decklist saved to {savePath}.");
+        }
+
+        public static bool IsDigitOrWhitespace(char c)
+        {
+            return char.IsDigit(c) || char.IsWhiteSpace(c);
+        }
+
+        public static (int, string) ExtractCardInfo(string line)
+        {
+            var match = Regex.Match(line, @"^(\d+)\s+(.*)$");
+
+            if (match.Success)
+            {
+                var count = int.Parse(match.Groups[1].Value);
+                var cardName = match.Groups[2].Value;
+                return (count, cardName);
+            }
+            else
+            {
+                return (1, line);
             }
         }
     }
