@@ -13,37 +13,64 @@ namespace DecklistManagement
 {
     public class DecklistDownloader
     {
+        public const string DECKLIST_FOLDER_NAME = "Decklists";
+        public const string PIONEER_DECKLIST_FOLDER = "Pioneer";
+        public static string GetDecklistFolderPath(string formatFolderName)
+        {
+            string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), DECKLIST_FOLDER_NAME, formatFolderName);
+            EnsurePathIsValid($"{path}{Path.PathSeparator}");
+            return path;
+        }
+
+        /*
+         * Write a c# method to check if a path is valid, and if it doesn't, create as many folders as needed along the path to make it a valid path
+         */
+        public static void EnsurePathIsValid(string path)
+        {
+            if (!Path.IsPathRooted(path))
+            {
+                throw new ArgumentException("The path must be an absolute path.");
+            }
+
+            var directory = Path.GetDirectoryName(path);
+
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+        }
+
         public static async void DownloadPioneerDecklists()
         {
-            var directoryPath = @"C:\Users\PeterBeckfield\Desktop\Decklists";
-            ProcessDecklists(directoryPath);
+            var pioneerDecklistPath = GetDecklistFolderPath(PIONEER_DECKLIST_FOLDER);
+            ProcessDecklists(pioneerDecklistPath);
 
             /*
             var url = "https://www.mtgtop8.com/archetype?a=920&meta=193&f=PI";
             await DownloadDecksAsync(url);
             */
 
-            /*
-            var url = "https://www.mtgtop8.com/format?f=PI";
-            await ScrapeAndDownloadArchetypesAsync(url);
-            */
-
-            /*
-            var url = "https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo";
-            var savePath = "C:\\Users\\PeterBeckfield\\Downloads\\Pioneer_Rakdos_Aggro_by_zarbo.txt";
-
-            await DownloadFileAsync(url, savePath);
-            */
-        }
-
-        /* GPT 3.5 Prompt:
-         * Write a c# method that downloads the file located at the following URL:
-            https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo
-            and saves it to disk
+        /*
+        var url = "https://www.mtgtop8.com/format?f=PI";
+        await ScrapeAndDownloadArchetypesAsync(url);
         */
 
-        // Had to remove some C# 8.0 stuff and fix file path since it dies if the path provided doesn't exist
-        public static async Task DownloadFileAsync(string url, string savePath)
+        /*
+        var url = "https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo";
+        var savePath = "C:\\Users\\PeterBeckfield\\Downloads\\Pioneer_Rakdos_Aggro_by_zarbo.txt";
+
+        await DownloadFileAsync(url, savePath);
+        */
+    }
+
+    /* GPT 3.5 Prompt:
+     * Write a c# method that downloads the file located at the following URL:
+        https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo
+        and saves it to disk
+    */
+
+    // Had to remove some C# 8.0 stuff and fix file path since it dies if the path provided doesn't exist
+    public static async Task DownloadFileAsync(string url, string savePath)
         {
             var httpClient = new HttpClient();
             var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
