@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Policy;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -14,11 +15,24 @@ namespace DecklistManagement
     public class DecklistDownloader
     {
         public const string DECKLIST_FOLDER_NAME = "Decklists";
+        public const string COMBINED_DECKLIST_FOLDER = "Combined";
         public const string PIONEER_DECKLIST_FOLDER = "Pioneer";
+        public const string MODERN_DECKLIST_FOLDER = "Modern";
+        public const string EXAMPLE_DECK_NAME = "FNM Hero - 51234.txt";
+
+        public const string PIONEER_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=PI";
+        public const string MODERN_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=MO";
+
         public static string GetDecklistFolderPath(string formatFolderName)
         {
-            string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), DECKLIST_FOLDER_NAME, formatFolderName);
-            EnsurePathIsValid($"{path}{Path.PathSeparator}");
+            string path = Path.Combine(
+                new string[] {
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    DECKLIST_FOLDER_NAME,
+                    formatFolderName
+                }
+            );
+            EnsurePathIsValid($"{path}//{EXAMPLE_DECK_NAME}");
             return path;
         }
 
@@ -42,35 +56,44 @@ namespace DecklistManagement
 
         public static async void DownloadPioneerDecklists()
         {
+            await ScrapeAndDownloadArchetypesAsync(PIONEER_DECKLIST_FOLDER, PIONEER_MTGTOP8_URL);
+
+            /*
             var pioneerDecklistPath = GetDecklistFolderPath(PIONEER_DECKLIST_FOLDER);
             ProcessDecklists(pioneerDecklistPath);
+            */
 
             /*
             var url = "https://www.mtgtop8.com/archetype?a=920&meta=193&f=PI";
             await DownloadDecksAsync(url);
             */
 
-        /*
-        var url = "https://www.mtgtop8.com/format?f=PI";
-        await ScrapeAndDownloadArchetypesAsync(url);
+            /*
+            var url = "https://www.mtgtop8.com/format?f=PI";
+            await ScrapeAndDownloadArchetypesAsync(url);
+            */
+
+            /*
+            var url = "https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo";
+            var savePath = "C:\\Users\\PeterBeckfield\\Downloads\\Pioneer_Rakdos_Aggro_by_zarbo.txt";
+
+            await DownloadFileAsync(url, savePath);
+            */
+        }
+
+        public static async void DownloadModernDecklists()
+        {
+            await ScrapeAndDownloadArchetypesAsync(MODERN_DECKLIST_FOLDER, MODERN_MTGTOP8_URL);
+        }
+
+        /* GPT 3.5 Prompt:
+         * Write a c# method that downloads the file located at the following URL:
+            https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo
+            and saves it to disk
         */
 
-        /*
-        var url = "https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo";
-        var savePath = "C:\\Users\\PeterBeckfield\\Downloads\\Pioneer_Rakdos_Aggro_by_zarbo.txt";
-
-        await DownloadFileAsync(url, savePath);
-        */
-    }
-
-    /* GPT 3.5 Prompt:
-     * Write a c# method that downloads the file located at the following URL:
-        https://www.mtgtop8.com/mtgo?d=520454&f=Pioneer_Rakdos_Aggro_by_zarbo
-        and saves it to disk
-    */
-
-    // Had to remove some C# 8.0 stuff and fix file path since it dies if the path provided doesn't exist
-    public static async Task DownloadFileAsync(string url, string savePath)
+        // Had to remove some C# 8.0 stuff and fix file path since it dies if the path provided doesn't exist
+        public static async Task DownloadFileAsync(string url, string savePath)
         {
             var httpClient = new HttpClient();
             var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -106,7 +129,7 @@ namespace DecklistManagement
         // Write a css selector that matches any link that begins like this: a[href='archetype?
         // Convert this css selector to an xpath: a[href^='archetype?']
 
-        public static async Task ScrapeAndDownloadArchetypesAsync(string url)
+        public static async Task ScrapeAndDownloadArchetypesAsync(string folder, string url)
         {
             var httpClient = new HttpClient();
             var html = await httpClient.GetStringAsync(url);
@@ -123,7 +146,7 @@ namespace DecklistManagement
 
                 Console.WriteLine($"{archetypeName} - {archetypeUrl}");
 
-                await DownloadDecksAsync(archetypeUrl);
+                await DownloadDecksAsync(folder, archetypeUrl, archetypeName);
             }
         }
 
@@ -142,13 +165,16 @@ namespace DecklistManagement
         */
 
         // Some minor updates, fixed xpath
-        public static async Task DownloadDecksAsync(string url)
+        public static async Task DownloadDecksAsync(string folder, string url, string archetypeName)
         {
             var httpClient = new HttpClient();
             var html = await httpClient.GetStringAsync(url);
 
             var doc = new HtmlAgilityPack.HtmlDocument();
             doc.LoadHtml(html);
+
+            string cleanArchetypeName = archetypeName.Replace("/", string.Empty);
+            cleanArchetypeName = cleanArchetypeName.Replace("\\", string.Empty);
 
             var deckNodes = doc.DocumentNode.SelectNodes("//a[starts-with(@href, 'event?')]");
 
@@ -175,13 +201,16 @@ namespace DecklistManagement
             foreach (var deckId in deckIds)
             {
                 var deckUrl = $"https://www.mtgtop8.com/mtgo?d={deckId}&f={deckId}.txt";
-                var savePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), $"Decklists\\{deckId}.txt");
+                var folderPath = GetDecklistFolderPath(folder);
+                var decklistName = $"{cleanArchetypeName} - {deckId}.txt";
+                var savePath = Path.Combine(folderPath, decklistName);
 
                 var response = await httpClient.GetAsync(deckUrl, HttpCompletionOption.ResponseHeadersRead);
 
                 response.EnsureSuccessStatusCode();
 
                 var contentStream = await response.Content.ReadAsStreamAsync();
+                Console.WriteLine($"{decklistName} {savePath}");
                 var fileStream = new FileStream(savePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
 
                 await contentStream.CopyToAsync(fileStream);

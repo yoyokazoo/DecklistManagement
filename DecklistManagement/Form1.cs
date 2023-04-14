@@ -21,5 +21,10 @@ namespace DecklistManagement
         {
             DecklistDownloader.DownloadPioneerDecklists();
         }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.DownloadModernDecklists();
+        }
     }
 }
