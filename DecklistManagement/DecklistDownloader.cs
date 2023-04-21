@@ -18,7 +18,9 @@ namespace DecklistManagement
         public const string COMBINED_DECKLIST_FOLDER = "Combined";
         public const string PIONEER_DECKLIST_FOLDER = "Pioneer";
         public const string MODERN_DECKLIST_FOLDER = "Modern";
+
         public const string EXAMPLE_DECK_NAME = "FNM Hero - 51234.txt";
+        public static string GetCombinedDecklistName(string archetypeName) => $"Combined{archetypeName}Decklist.txt";
 
         public const string PIONEER_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=PI";
         public const string MODERN_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=MO";
@@ -84,6 +86,41 @@ namespace DecklistManagement
         public static async void DownloadModernDecklists()
         {
             await ScrapeAndDownloadArchetypesAsync(MODERN_DECKLIST_FOLDER, MODERN_MTGTOP8_URL);
+        }
+
+        public static async void CombinePioneerDecklists()
+        {
+            CombineDecklists(PIONEER_DECKLIST_FOLDER, COMBINED_DECKLIST_FOLDER);
+        }
+
+        public static async void CombineModernDecklists()
+        {
+            CombineDecklists(MODERN_DECKLIST_FOLDER, COMBINED_DECKLIST_FOLDER);
+        }
+
+        public static async void FindPioneerModernDecklistDifferences()
+        {
+            FindDecklistDifferences(
+                Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), GetCombinedDecklistName(PIONEER_DECKLIST_FOLDER)),
+                Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), GetCombinedDecklistName(MODERN_DECKLIST_FOLDER)),
+                Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), "asdf.txt")
+            );
+        }
+
+        public static async void CalculatePioneerCompletionPercentage()
+        {
+            // TODO push this inside method
+            var pioneerDecklistFolderPath = GetDecklistFolderPath(PIONEER_DECKLIST_FOLDER);
+            var combinedFileName = Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), "fdsa.txt");
+            CalculateDeckCompletionPercentage(pioneerDecklistFolderPath, combinedFileName);
+        }
+
+        public static async void CalculateModernCompletionPercentage()
+        {
+            // TODO push this inside method
+            var modernDecklistFolderPath = GetDecklistFolderPath(MODERN_DECKLIST_FOLDER);
+            var combinedFileName = Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), "fdsa.txt");
+            CalculateDeckCompletionPercentage(modernDecklistFolderPath, combinedFileName);
         }
 
         /* GPT 3.5 Prompt:
@@ -234,11 +271,14 @@ namespace DecklistManagement
             Once all of the files have been iterated through and all of the card names have been added to the dictionary, save a new file called CombinedDecklist.txt that contains one line per card name
         */
 
-        public static void ProcessDecklists(string directoryPath)
+        public static void CombineDecklists(string sourceFolderName, string destinationFolderName)
         {
             Dictionary<string, int> cardCount = new Dictionary<string, int>();
 
-            var decklistFiles = Directory.GetFiles(directoryPath, "*.txt");
+            var sourceFolderPath = GetDecklistFolderPath(sourceFolderName);
+            var destinationFolderPath = GetDecklistFolderPath(destinationFolderName);
+
+            var decklistFiles = Directory.GetFiles(sourceFolderPath, "*.txt");
 
             foreach (var decklistFile in decklistFiles)
             {
@@ -273,13 +313,145 @@ namespace DecklistManagement
                 }
             }
 
-            int minimumInstanceThreshold = 8;
-            var trimmedCardCount = cardCount.Where(kv => kv.Value >= minimumInstanceThreshold).OrderBy(kv => kv.Value);
-            var combinedDecklist = string.Join(Environment.NewLine, trimmedCardCount.Select(kv => $"{kv.Value}x " + kv.Key.Trim()));
+            int minimumInstanceThreshold = 16;
+            var trimmedCardCount = cardCount.Where(kv => kv.Value >= minimumInstanceThreshold).OrderByDescending(kv => kv.Value);
+            //var combinedDecklist = string.Join(Environment.NewLine, trimmedCardCount.Select(kv => $"{kv.Value}x " + kv.Key.Trim()));
+            var combinedDecklist = string.Join(Environment.NewLine, trimmedCardCount.Select(kv => kv.Key.Trim()));
 
-            var savePath = Path.Combine(directoryPath, "CombinedDecklist.txt");
+            var savePath = Path.Combine(destinationFolderPath, GetCombinedDecklistName(sourceFolderName));
             File.WriteAllText(savePath, combinedDecklist);
             Console.WriteLine($"Combined decklist saved to {savePath}.");
+        }
+
+        // Takes all of the cards from the second decklist, and removes any cards that also exist in the first decklist
+        public static void FindDecklistDifferences(string firstDecklistName, string secondDecklistName, string outputFileName)
+        {
+            var combinedFolderPath = GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER);
+
+            var firstDecklistPath = Path.Combine(combinedFolderPath, firstDecklistName);
+            var secondDecklistPath = Path.Combine(combinedFolderPath, secondDecklistName);
+
+            var firstDecklist = File.ReadAllLines(firstDecklistPath);
+            var secondDecklist = File.ReadAllLines(secondDecklistPath);
+
+            var diffLines = secondDecklist.Except(firstDecklist);
+
+            Console.WriteLine($"First Decklist had {firstDecklist.Count()} cards.");
+            Console.WriteLine($"Second Decklist had {secondDecklist.Count()} cards.");
+            Console.WriteLine($"Difference has {diffLines.Count()} cards.");
+            Console.WriteLine($"First Decklist plus Difference has {firstDecklist.Count() + diffLines.Count()} cards (overlap was {secondDecklist.Count() - diffLines.Count()} cards).");
+
+            File.WriteAllLines(outputFileName, diffLines);
+        }
+
+        /*
+         * Write a c# method that takes in an input file directory we'll call "Decklists" and an input file path called "Collection".
+
+            Iterate through each file in the Decklists directory.  For each file, a list of cards will be written in the following format:
+
+            # CardName
+
+            The method should sum up the total number of cards in the file, and the total number of card names that exist in the Collection file.  Then output the percentage of cards in the decklist file that exist in the collection file
+        */
+        public static void CalculateDeckCompletionPercentage(string decklistsDirectory, string collectionFilePath)
+        {
+            if (!Directory.Exists(decklistsDirectory))
+            {
+                Console.WriteLine("Decklists directory not found.");
+                return;
+            }
+
+            if (!File.Exists(collectionFilePath))
+            {
+                Console.WriteLine("Collection file not found.");
+                return;
+            }
+
+            List<int> missingCards = new List<int>();
+
+            // Read the Collection file
+            HashSet<string> collection = new HashSet<string>(File.ReadAllLines(collectionFilePath));
+
+            // Iterate through each file in the Decklists directory
+            foreach (string decklistPath in Directory.GetFiles(decklistsDirectory))
+            {
+                string[] decklistLines = File.ReadAllLines(decklistPath);
+
+                int totalCardsInDecklist = 0;
+                int cardsInCollection = 0;
+
+                // Iterate through each line in the decklist file
+                foreach (string line in decklistLines)
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.Equals("Sideboard"))
+                    {
+                        continue;
+                    }
+
+                    (int, string) cardInfo = ExtractCardInfo(line);
+                    int cardAmount = cardInfo.Item1;
+                    string cardName = cardInfo.Item2;
+
+                    totalCardsInDecklist += cardAmount;
+                    if (collection.Contains(cardName))
+                    {
+                        cardsInCollection += cardAmount;
+                    }
+                }
+
+                if (totalCardsInDecklist == 0)
+                {
+                    Console.WriteLine("No cards found in decklist.");
+                }
+                else
+                {
+                    var cardsMissing = totalCardsInDecklist - cardsInCollection;
+                    double percentage = (double)cardsMissing / totalCardsInDecklist * 100;
+                    Console.WriteLine($"Percentage of cards {decklistPath} missing: {cardsMissing} ({percentage:0.00}%)");
+                    missingCards.Add(cardsMissing);
+                }
+            }
+            ExportIntegersToCsv(missingCards, "missingCards.txt");
+        }
+
+        // Write a c# method that takes a list of integers and exports them as a file that can be imported to google sheets with a bar graph of the count of each integer
+        public static void ExportIntegersToCsv(List<int> integers, string outputFilePath)
+        {
+            if (integers == null || integers.Count == 0)
+            {
+                Console.WriteLine("Empty list of integers.");
+                return;
+            }
+
+            // Count the occurrences of each integer
+            Dictionary<int, int> integerCounts = new Dictionary<int, int>();
+            foreach (int number in integers)
+            {
+                if (integerCounts.ContainsKey(number))
+                {
+                    integerCounts[number]++;
+                }
+                else
+                {
+                    integerCounts[number] = 1;
+                }
+            }
+
+            // Sort the integers
+            var sortedIntegers = integerCounts.Keys.ToList();
+            sortedIntegers.Sort();
+
+            // Create the CSV data
+            List<string> csvLines = new List<string> { "Integer,Count" };
+            foreach (int number in sortedIntegers)
+            {
+                csvLines.Add($"{number},{integerCounts[number]}");
+            }
+
+            // Write the CSV data to the output file
+            File.WriteAllLines(outputFilePath, csvLines);
+
+            Console.WriteLine($"Exported integers to CSV file: {outputFilePath}");
         }
 
         public static bool IsDigitOrWhitespace(char c)

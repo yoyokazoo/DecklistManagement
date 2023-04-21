@@ -26,5 +26,30 @@ namespace DecklistManagement
         {
             DecklistDownloader.DownloadModernDecklists();
         }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.CombinePioneerDecklists();
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.CombineModernDecklists();
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.FindPioneerModernDecklistDifferences();
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.CalculatePioneerCompletionPercentage();
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            DecklistDownloader.CalculateModernCompletionPercentage();
+        }
     }
 }
