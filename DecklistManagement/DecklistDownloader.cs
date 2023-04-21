@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -24,6 +25,8 @@ namespace DecklistManagement
 
         public const string PIONEER_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=PI";
         public const string MODERN_MTGTOP8_URL = "https://www.mtgtop8.com/format?f=MO";
+
+        public static readonly string[] BASIC_LAND_NAMES = new string[] { "Plains", "Island", "Swamp", "Mountain", "Forest", "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp", "Snow-Covered Mountain", "Snow-Covered Forest", "Wastes" };
 
         public static string GetDecklistFolderPath(string formatFolderName)
         {
@@ -110,17 +113,15 @@ namespace DecklistManagement
         public static async void CalculatePioneerCompletionPercentage()
         {
             // TODO push this inside method
-            var pioneerDecklistFolderPath = GetDecklistFolderPath(PIONEER_DECKLIST_FOLDER);
             var combinedFileName = Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), "fdsa.txt");
-            CalculateDeckCompletionPercentage(pioneerDecklistFolderPath, combinedFileName);
+            CalculateDeckCompletionPercentage(PIONEER_DECKLIST_FOLDER, combinedFileName);
         }
 
         public static async void CalculateModernCompletionPercentage()
         {
             // TODO push this inside method
-            var modernDecklistFolderPath = GetDecklistFolderPath(MODERN_DECKLIST_FOLDER);
             var combinedFileName = Path.Combine(GetDecklistFolderPath(COMBINED_DECKLIST_FOLDER), "fdsa.txt");
-            CalculateDeckCompletionPercentage(modernDecklistFolderPath, combinedFileName);
+            CalculateDeckCompletionPercentage(MODERN_DECKLIST_FOLDER, combinedFileName);
         }
 
         /* GPT 3.5 Prompt:
@@ -297,6 +298,11 @@ namespace DecklistManagement
                         int cardAmount = cardInfo.Item1;
                         string cardName = cardInfo.Item2;
 
+                        if (BASIC_LAND_NAMES.Contains(cardName))
+                        {
+                            continue;
+                        }
+
                         // Depends on what we think is more important, raw card count or instances
                         // For now I think instances
                         if (cardCount.ContainsKey(cardName))
@@ -353,8 +359,10 @@ namespace DecklistManagement
 
             The method should sum up the total number of cards in the file, and the total number of card names that exist in the Collection file.  Then output the percentage of cards in the decklist file that exist in the collection file
         */
-        public static void CalculateDeckCompletionPercentage(string decklistsDirectory, string collectionFilePath)
+        public static void CalculateDeckCompletionPercentage(string sourceFolderName, string collectionFilePath)
         {
+            var decklistsDirectory = GetDecklistFolderPath(sourceFolderName);
+
             if (!Directory.Exists(decklistsDirectory))
             {
                 Console.WriteLine("Decklists directory not found.");
@@ -368,14 +376,20 @@ namespace DecklistManagement
             }
 
             List<int> missingCards = new List<int>();
+            List<string> decklistCompletionPercentageLog = new List<string>();
 
             // Read the Collection file
             HashSet<string> collection = new HashSet<string>(File.ReadAllLines(collectionFilePath));
+            foreach(string basicLand in BASIC_LAND_NAMES)
+            {
+                collection.Add(basicLand);
+            }
 
             // Iterate through each file in the Decklists directory
             foreach (string decklistPath in Directory.GetFiles(decklistsDirectory))
             {
                 string[] decklistLines = File.ReadAllLines(decklistPath);
+                HashSet<string> missingCardNames = new HashSet<string>();
 
                 int totalCardsInDecklist = 0;
                 int cardsInCollection = 0;
@@ -397,6 +411,10 @@ namespace DecklistManagement
                     {
                         cardsInCollection += cardAmount;
                     }
+                    else
+                    {
+                        missingCardNames.Add(cardName);
+                    }
                 }
 
                 if (totalCardsInDecklist == 0)
@@ -407,11 +425,33 @@ namespace DecklistManagement
                 {
                     var cardsMissing = totalCardsInDecklist - cardsInCollection;
                     double percentage = (double)cardsMissing / totalCardsInDecklist * 100;
-                    Console.WriteLine($"Percentage of cards {decklistPath} missing: {cardsMissing} ({percentage:0.00}%)");
+                    //var decklistNumber = ExtractNumbersFromFilePath(decklistPath);
+                    var percentageLogString = $"Percentage of cards {Path.GetFileName(decklistPath)} missing: {cardsMissing} ({percentage:0.00}%)";
+                    var missingCardString = $"Missing Cards, {string.Join(",", missingCardNames)}";
+                    Console.WriteLine($"{percentageLogString}\t\t{missingCardString}");
+
                     missingCards.Add(cardsMissing);
+                    decklistCompletionPercentageLog.Add($"{percentageLogString},{missingCardString}");
                 }
             }
-            ExportIntegersToCsv(missingCards, "missingCards.txt");
+            ExportIntegersToCsv(missingCards, $"missing{sourceFolderName}Cards.csv");
+            File.WriteAllLines($"missing{sourceFolderName}CardsFromDeckLog.csv", decklistCompletionPercentageLog);
+        }
+
+        //Given a string like: C:\Users\peter\Desktop\Decklists\Pioneer\Weenie White - 520945.txt write a c# method to extract the numbers right before .txt
+        public static int ExtractNumbersFromFilePath(string filePath)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(filePath);
+            var match = Regex.Match(fileName, @"(\d+)$");
+
+            if (match.Success)
+            {
+                return int.Parse(match.Groups[1].Value);
+            }
+            else
+            {
+                throw new ArgumentException("The file path does not contain a number before the .txt extension.");
+            }
         }
 
         // Write a c# method that takes a list of integers and exports them as a file that can be imported to google sheets with a bar graph of the count of each integer
@@ -442,7 +482,7 @@ namespace DecklistManagement
             sortedIntegers.Sort();
 
             // Create the CSV data
-            List<string> csvLines = new List<string> { "Integer,Count" };
+            List<string> csvLines = new List<string> { "Missing Cards,Deck Count" };
             foreach (int number in sortedIntegers)
             {
                 csvLines.Add($"{number},{integerCounts[number]}");
